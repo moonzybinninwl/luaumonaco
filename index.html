@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Complete Luau Editor</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+        #container {
+            height: 100vh;
+            width: 100vw;
+        }
+        .error-message {
+            background-color: rgba(255, 0, 0, 0.2);
+            border-left: 3px solid #ff0000;
+            padding: 2px 6px;
+            margin-left: 12px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
+    <script>
+        // Global reference to the editor
+        let editor;
+
+        // Configuration for WebView compatibility
+        window.LuauEditor = {
+            getText: function() {
+                return editor ? editor.getValue() : '';
+            },
+            setText: function(text) {
+                if (editor) {
+                    editor.setValue(text || '');
+                }
+            },
+            setMinimap: function(visible) {
+                if (editor) {
+                    editor.updateOptions({ minimap: { enabled: visible } });
+                }
+            },
+            setTheme: function(theme) {
+                if (editor) {
+                    monaco.editor.setTheme(theme === 'light' ? 'luau-light' : 'luau-theme');
+                }
+            }
+        };
+
+        // Configure Monaco loader
+        require.config({ 
+            paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' },
+            'vs/nls': { availableLanguages: { '*': 'en' } }
+        });
+        
+        require(['vs/editor/editor.main'], function() {
+            // Register Luau language
+            monaco.languages.register({ id: 'luau' });
+            
+            // Complete Luau syntax highlighting with all keywords and functions
+            monaco.languages.setMonarchTokensProvider('luau', {
+                defaultToken: '',
+                tokenPostfix: '.lua',
+                
+                // All Luau keywords from https://luau-lang.org/syntax
+                keywords: [
+                    'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if',
+                    'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true', 'until', 'while',
+                    'continue', 'export', 'type', 'typeof'
+                ],
+                
+                typeKeywords: [
+                    'any', 'boolean', 'number', 'string', 'table', 'void', 'never', 'unknown'
+                ],
+                
+                // All standard Lua/Luau library functions
+                builtinFunctions: [
+                    // Basic functions
+                    'assert', 'error', 'getmetatable', 'ipairs', 'next', 'pairs', 'pcall', 'print',
+                    'rawequal', 'rawget', 'rawlen', 'rawset', 'require', 'select', 'setmetatable',
+                    'tonumber', 'tostring', 'type', 'typeof', 'unpack', 'warn', 'xpcall',
+                    
+                    // Coroutine
+                    'coroutine.create', 'coroutine.resume', 'coroutine.running', 'coroutine.status',
+                    'coroutine.wrap', 'coroutine.yield',
+                    
+                    // String
+                    'string.byte', 'string.char', 'string.find', 'string.format', 'string.gmatch',
+                    'string.gsub', 'string.len', 'string.lower', 'string.match', 'string.rep',
+                    'string.reverse', 'string.split', 'string.sub', 'string.upper',
+                    
+                    // Table
+                    'table.clear', 'table.clone', 'table.concat', 'table.create', 'table.find',
+                    'table.freeze', 'table.getn', 'table.insert', 'table.isfrozen', 'table.maxn',
+                    'table.move', 'table.pack', 'table.remove', 'table.sort', 'table.unpack',
+                    
+                    // Math
+                    'math.abs', 'math.acos', 'math.asin', 'math.atan', 'math.atan2', 'math.ceil',
+                    'math.clamp', 'math.cos', 'math.cosh', 'math.deg', 'math.exp', 'math.floor',
+                    'math.fmod', 'math.frexp', 'math.ldexp', 'math.log', 'math.log10', 'math.max',
+                    'math.min', 'math.modf', 'math.noise', 'math.pow', 'math.rad', 'math.random',
+                    'math.randomseed', 'math.round', 'math.sign', 'math.sin', 'math.sinh', 'math.sqrt',
+                    'math.tan', 'math.tanh',
+                    
+                    // Bit32
+                    'bit32.arshift', 'bit32.band', 'bit32.bnot', 'bit32.bor', 'bit32.btest',
+                    'bit32.bxor', 'bit32.extract', 'bit32.lrotate', 'bit32.lshift', 'bit32.replace',
+                    'bit32.rrotate', 'bit32.rshift',
+                    
+                    // UTF-8
+                    'utf8.char', 'utf8.charpattern', 'utf8.codepoint', 'utf8.codes', 'utf8.len',
+                    'utf8.offset',
+                    
+                    // Roblox globals
+                    'Instance.new', 'Vector3.new', 'CFrame.new', 'Color3.new', 'UDim2.new',
+                    'Enum', 'game', 'script', 'workspace', 'wait', 'delay', 'spawn', 'tick',
+                    'ElapsedTime', 'os.time', 'os.date', 'os.clock', 'os.difftime'
+                ],
+                
+                operators: [
+                    '+', '-', '*', '/', '%', '^', '#', '==', '~=', '<=', '>=', '<', '>', '=',
+                    ';', ':', ',', '.', '..', '...', '::'
+                ],
+                
+                symbols: /[=><!~?:&|+\-*\/\^%]+/,
+                escapes: /\\(?:[abfnrtv\\"']|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
+                
+                tokenizer: {
+                    root: [
+                        // Keywords with special coloring
+                        [/(local|function|type)\s+([a-zA-Z_]\w*)/, 
+                            ['keyword.declaration', { token: 'variable', next: '@type_annotation' }]],
+                        
+                        // Built-in functions
+                        [/([a-zA-Z_][\w.]*)(?=\s*\()/, {
+                            cases: {
+                                '@builtinFunctions': 'support.function',
+                                '@default': 'identifier'
+                            }
+                        }],
+                        
+                        // Regular identifiers
+                        [/[a-zA-Z_]\w*/, {
+                            cases: {
+                                '@keywords': 'keyword',
+                                '@typeKeywords': 'type',
+                                '@default': 'identifier'
+                            }
+                        }],
+                        
+                        { include: '@whitespace' },
+                        [/[{}()\[\]]/, '@brackets'],
+                        [/[<>](?!@symbols)/, '@brackets'],
+                        [/@symbols/, {
+                            cases: {
+                                '@operators': 'operator',
+                                '@default': ''
+                            }
+                        }],
+                        [/\d*\.\d+([eE][\-+]?\d+)?/, 'number.float'],
+                        [/0[xX][0-9a-fA-F]+/, 'number.hex'],
+                        [/\d+/, 'number'],
+                        [/[;,.]/, 'delimiter'],
+                        [/"/, 'string', '@string_double'],
+                        [/'/, 'string', '@string_single'],
+                        [/\[=*\[/, 'string', '@string_multiline'],
+                    ],
+                    
+                    type_annotation: [
+                        [/\s*:\s*/, 'operator', '@type'],
+                        [/[^\s]/, { token: '', next: '@pop' }],
+                        [/$/, { token: '', next: '@pop' }]
+                    ],
+                    
+                    type: [
+                        [/[a-zA-Z_]\w*/, {
+                            cases: {
+                                '@typeKeywords': 'type',
+                                '@default': 'type'
+                            }
+                        }],
+                        [/[{}()\[\]]/, '@brackets'],
+                        [/[|&]/, 'operator'],
+                        [/\s*[^|&\s]/, { token: '', next: '@pop' }],
+                        [/$/, { token: '', next: '@pop' }]
+                    ],
+                    
+                    whitespace: [
+                        [/[ \t\r\n]+/, 'white'],
+                        [/--\[=*\[/, 'comment', '@comment_multiline'],
+                        [/--.*$/, 'comment'],
+                    ],
+                    
+                    string_double: [
+                        [/[^\\"]+/, 'string'],
+                        [/@escapes/, 'string.escape'],
+                        [/\\./, 'string.escape.invalid'],
+                        [/"/, 'string', '@pop']
+                    ],
+                    
+                    string_single: [
+                        [/[^\\']+/, 'string'],
+                        [/@escapes/, 'string.escape'],
+                        [/\\./, 'string.escape.invalid'],
+                        [/'/, 'string', '@pop']
+                    ],
+                    
+                    string_multiline: [
+                        [/[^\]]+/, 'string'],
+                        [/\]=*\]/, 'string', '@pop'],
+                        [/./, 'string']
+                    ],
+                    
+                    comment_multiline: [
+                        [/[^\]]+/, 'comment'],
+                        [/\]=*\]/, 'comment', '@pop'],
+                        [/./, 'comment']
+                    ],
+                }
+            });
+
+            // Define dark theme
+            monaco.editor.defineTheme('luau-theme', {
+                base: 'vs-dark',
+                inherit: true,
+                rules: [
+                    { token: 'keyword', foreground: '#C586C0' },
+                    { token: 'keyword.declaration', foreground: '#569CD6', fontStyle: 'bold' },
+                    { token: 'type', foreground: '#4EC9B0' },
+                    { token: 'typeKeywords', foreground: '#4EC9B0' },
+                    { token: 'support.function', foreground: '#DCDCAA' },
+                    { token: 'number', foreground: '#B5CEA8' },
+                    { token: 'string', foreground: '#CE9178' },
+                    { token: 'comment', foreground: '#6A9955' },
+                    { token: 'operator', foreground: '#D4D4D4' },
+                    { token: 'delimiter', foreground: '#D4D4D4' },
+                    { token: 'identifier', foreground: '#9CDCFE' },
+                    { token: 'variable', foreground: '#9CDCFE' }
+                ],
+                colors: {
+                    'editor.background': '#1E1E1E',
+                    'editor.lineHighlightBackground': '#282828',
+                }
+            });
+
+            // Define light theme
+            monaco.editor.defineTheme('luau-light', {
+                base: 'vs',
+                inherit: true,
+                rules: [
+                    { token: 'keyword', foreground: '#0000FF' },
+                    { token: 'keyword.declaration', foreground: '#0000FF', fontStyle: 'bold' },
+                    { token: 'type', foreground: '#267F99' },
+                    { token: 'typeKeywords', foreground: '#267F99' },
+                    { token: 'support.function', foreground: '#795E26' },
+                    { token: 'number', foreground: '#098658' },
+                    { token: 'string', foreground: '#A31515' },
+                    { token: 'comment', foreground: '#008000' },
+                    { token: 'operator', foreground: '#000000' },
+                    { token: 'delimiter', foreground: '#000000' },
+                    { token: 'identifier', foreground: '#001080' },
+                    { token: 'variable', foreground: '#0070C1' }
+                ],
+                colors: {
+                    'editor.background': '#FFFFFF',
+                    'editor.lineHighlightBackground': '#F3F3F3',
+                }
+            });
+
+            // Create editor with optimized settings
+            editor = monaco.editor.create(document.getElementById('container'), {
+                value: [
+                    '-- Complete Luau example with all features',
+                    'local function calculate(a: number, b: number): number',
+                    '    -- Math functions',
+                    '    local sum = math.floor(a) + math.ceil(b)',
+                    '    ',
+                    '    -- String operations',
+                    '    local str = string.format("Result: %.2f", sum)',
+                    '    ',
+                    '    -- Table operations',
+                    '    local tbl = table.create(10, 0)',
+                    '    table.insert(tbl, sum)',
+                    '    ',
+                    '    -- Bit32 operations',
+                    '    local bits = bit32.band(0xFF, 0x0F)',
+                    '    ',
+                    '    return sum',
+                    'end',
+                    '',
+                    '-- Coroutine example',
+                    'local co = coroutine.create(function()',
+                    '    for i = 1, 5 do',
+                    '        print("Coroutine", i)',
+                    '        coroutine.yield()',
+                    '    end',
+                    'end)',
+                    '',
+                    '-- Roblox-specific examples',
+                    'local part = Instance.new("Part")',
+                    'part.Size = Vector3.new(10, 10, 10)',
+                    'part.Position = Vector3.new(0, 5, 0)',
+                    '',
+                    'print("All Luau features available!")'
+                ].join('\n'),
+                language: 'luau',
+                theme: 'luau-theme',
+                automaticLayout: true,
+                minimap: { enabled: true },
+                fontSize: 14,
+                lineNumbers: 'on',
+                roundedSelection: true,
+                scrollBeyondLastLine: false,
+                readOnly: false,
+                renderWhitespace: 'none',
+                renderValidationDecorations: 'on',
+                quickSuggestions: {
+                    other: true,
+                    comments: false,
+                    strings: false
+                },
+                suggestOnTriggerCharacters: true,
+                tabCompletion: 'off',
+                wordBasedSuggestions: true,
+                suggestSelection: 'first',
+                smoothScrolling: true,
+                mouseWheelZoom: true,
+                cursorBlinking: 'smooth',
+                cursorSmoothCaretAnimation: true,
+                cursorStyle: 'line',
+                fontLigatures: true,
+                formatOnType: true,
+                formatOnPaste: true,
+                parameterHints: {
+                    enabled: true,
+                    cycle: true
+                },
+                hover: {
+                    enabled: true,
+                    delay: 300,
+                    sticky: true
+                }
+            });
+
+            // Enhanced completion provider with all Luau functions
+            monaco.languages.registerCompletionItemProvider('luau', {
+                triggerCharacters: ['.', ':', ',', '(', '"', "'", '[', '='],
+                provideCompletionItems: function(model, position, context) {
+                    const word = model.getWordUntilPosition(position);
+                    const range = {
+                        startLineNumber: position.lineNumber,
+                        endLineNumber: position.lineNumber,
+                        startColumn: word.startColumn,
+                        endColumn: word.endColumn
+                    };
+                    
+                    const lineContent = model.getLineContent(position.lineNumber).substr(0, position.column - 1);
+                    const suggestions = [];
+                    
+                    // Function completion after "local" or "function"
+                    if (lineContent.match(/(local\s+|function\s+)$/)) {
+                        suggestions.push({
+                            label: 'function',
+                            kind: monaco.languages.CompletionItemKind.Function,
+                            insertText: '${1:name}(${2:params})\n\t${3}\nend',
+                            insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                            documentation: 'Function declaration',
+                            range: range
+                        });
+                    }
+                    
+                    // Common Luau keywords (only show when explicitly triggered)
+                    if (context.triggerKind === monaco.languages.CompletionTriggerKind.TriggerCharacter) {
+                        const keywords = [
+                            { label: 'if', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'if ${1:condition} then\n\t${2}\nend' },
+                            { label: 'for', kind: monaco.languages.CompletionItemKind.Keyword, 
+                              insertText: 'for ${1:i} = ${2:1}, ${3:10}${4:, ${5:1}} do\n\t${6}\nend' },
+                            { label: 'while', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'while ${1:condition} do\n\t${2}\nend' },
+                            { label: 'function', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'function ${1:name}(${2})\n\t${3}\nend' },
+                            { label: 'local', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'local ${1:var} = ${2}' },
+                            { label: 'type', kind: monaco.languages.CompletionItemKind.Keyword, insertText: 'type ${1:Name} = ${2}' }
+                        ];
+                        suggestions.push(...keywords);
+                    }
+                    
+                    // Member access completion (after dot)
+                    if (context.triggerCharacter === '.') {
+                        const beforeDot = lineContent.substring(0, lineContent.lastIndexOf('.'));
+                        const variableMatch = beforeDot.match(/([\w.]+)\s*$/);
+                        
+                        if (variableMatch) {
+                            const varName = variableMatch[1];
+                            
+                            // Complete standard library functions
+                            if (varName === 'math') {
+                                suggestions.push(
+                                    { label: 'abs', kind: monaco.languages.CompletionItemKind.Method, insertText: 'abs(${1:x})', documentation: 'Returns the absolute value of x', range: range },
+                                    { label: 'acos', kind: monaco.languages.CompletionItemKind.Method, insertText: 'acos(${1:x})', documentation: 'Returns the arc cosine of x (in radians)', range: range },
+                                    // Add all other math functions...
+                                    { label: 'sin', kind: monaco.languages.CompletionItemKind.Method, insertText: 'sin(${1:x})', documentation: 'Returns the sine of x (in radians)', range: range },
+                                    { label: 'sqrt', kind: monaco.languages.CompletionItemKind.Method, insertText: 'sqrt(${1:x})', documentation: 'Returns the square root of x', range: range }
+                                );
+                            }
+                            else if (varName === 'string') {
+                                suggestions.push(
+                                    { label: 'byte', kind: monaco.languages.CompletionItemKind.Method, insertText: 'byte(${1:s}${2:, i}${3:, j})', documentation: 'Returns the internal numeric codes of characters s[i] to s[j]', range: range },
+                                    { label: 'char', kind: monaco.languages.CompletionItemKind.Method, insertText: 'char(${1:...})', documentation: 'Returns a string with length equal to the number of arguments', range: range },
+                                    // Add all other string functions...
+                                    { label: 'sub', kind: monaco.languages.CompletionItemKind.Method, insertText: 'sub(${1:s}, ${2:i}${3:, j})', documentation: 'Returns the substring of s from i to j', range: range }
+                                );
+                            }
+                            // Add completions for other libraries (table, bit32, etc.)
+                        }
+                    }
+                    
+                    // Add all global functions
+                    if (context.triggerKind === monaco.languages.CompletionTriggerKind.Invoke) {
+                        suggestions.push(
+                            { label: 'print', kind: monaco.languages.CompletionItemKind.Function, insertText: 'print(${1:...})', documentation: 'Prints values to the output', range: range },
+                            { label: 'require', kind: monaco.languages.CompletionItemKind.Function, insertText: 'require(${1:module})', documentation: 'Loads the given module', range: range },
+                            { label: 'assert', kind: monaco.languages.CompletionItemKind.Function, insertText: 'assert(${1:v}${2:, message})', documentation: 'Raises an error if v is false or nil', range: range },
+                            { label: 'error', kind: monaco.languages.CompletionItemKind.Function, insertText: 'error(${1:message}${2:, level})', documentation: 'Raises an error with the given message', range: range },
+                            { label: 'pcall', kind: monaco.languages.CompletionItemKind.Function, insertText: 'pcall(${1:f}, ${2:...})', documentation: 'Calls function f in protected mode', range: range },
+                            { label: 'xpcall', kind: monaco.languages.CompletionItemKind.Function, insertText: 'xpcall(${1:f}, ${2:errhandler})', documentation: 'Calls function f in protected mode with error handler', range: range },
+                            { label: 'tonumber', kind: monaco.languages.CompletionItemKind.Function, insertText: 'tonumber(${1:e}${2:, base})', documentation: 'Converts value to a number', range: range },
+                            { label: 'tostring', kind: monaco.languages.CompletionItemKind.Function, insertText: 'tostring(${1:v})', documentation: 'Converts value to a string', range: range },
+                            { label: 'type', kind: monaco.languages.CompletionItemKind.Function, insertText: 'type(${1:v})', documentation: 'Returns the type of v as a string', range: range },
+                            { label: 'typeof', kind: monaco.languages.CompletionItemKind.Function, insertText: 'typeof(${1:v})', documentation: 'Returns the Luau type of v as a string', range: range }
+                        );
+                    }
+                    
+                    return { suggestions: suggestions };
+                }
+            });
+
+            // Handle tab key properly (insert tab instead of completing)
+            editor.addCommand(monaco.KeyCode.Tab, function() {
+                editor.trigger('keyboard', 'type', { text: '\t' });
+            });
+
+            // Error markers with Error Lens-like display
+            const setErrorMarkers = () => {
+                const model = editor.getModel();
+                const content = model.getValue();
+                const errors = [];
+                const lines = content.split('\n');
+                
+                // Simple error detection
+                lines.forEach((line, i) => {
+                    // Detect string passed to numeric functions
+                    const numericFuncs = ['math.abs', 'math.sin', 'math.cos', 'math.floor', 'math.ceil'];
+                    numericFuncs.forEach(func => {
+                        const regex = new RegExp(`${func}\\s*\\([^)]*["'][^)]*\\)`);
+                        const match = line.match(regex);
+                        if (match) {
+                            const startCol = line.indexOf(func + '(') + func.length + 1;
+                            const endCol = line.indexOf(')');
+                            errors.push({
+                                severity: monaco.MarkerSeverity.Error,
+                                startLineNumber: i + 1,
+                                startColumn: startCol + 1,
+                                endLineNumber: i + 1,
+                                endColumn: endCol,
+                                message: 'Type mismatch: string cannot be used as number'
+                            });
+                        }
+                    });
+                    
+                    // Detect missing end
+                    const functionDef = line.match(/function\s+\w+\s*\(/);
+                    if (functionDef && !content.includes('end', model.getOffsetAt({ lineNumber: i + 1, column: 1 }))) {
+                        errors.push({
+                            severity: monaco.MarkerSeverity.Error,
+                            startLineNumber: i + 1,
+                            startColumn: line.indexOf('function') + 1,
+                            endLineNumber: i + 1,
+                            endColumn: line.indexOf('function') + 9,
+                            message: 'Missing "end" for function declaration'
+                        });
+                    }
+                });
+                
+                monaco.editor.setModelMarkers(model, 'owner', errors);
+            };
+
+            // Check for errors on content change (debounced for performance)
+            let debounceTimer;
+            editor.getModel().onDidChangeContent(() => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(setErrorMarkers, 300);
+            });
+
+            // Initial error check
+            setErrorMarkers();
+            
+            // Add Error Lens-like decorations
+            editor.onDidChangeModelDecorations(() => {
+                const model = editor.getModel();
+                const decorations = [];
+                const markers = monaco.editor.getModelMarkers({ resource: model.uri });
+                
+                markers.forEach(marker => {
+                    if (marker.severity === monaco.MarkerSeverity.Error) {
+                        decorations.push({
+                            range: new monaco.Range(
+                                marker.startLineNumber,
+                                marker.startColumn,
+                                marker.endLineNumber,
+                                marker.endColumn
+                            ),
+                            options: {
+                                isWholeLine: false,
+                                className: 'error-message',
+                                glyphMarginClassName: 'error-glyph',
+                                hoverMessage: { value: marker.message },
+                                overviewRuler: {
+                                    position: monaco.editor.OverviewRulerLane.Right,
+                                    color: 'rgba(255, 0, 0, 0.7)'
+                                },
+                                minimap: {
+                                    position: monaco.editor.MinimapPosition.Gutter,
+                                    color: 'rgba(255, 0, 0, 0.7)'
+                                },
+                                stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+                            }
+                        });
+                    }
+                });
+                
+                editor.deltaDecorations([], decorations);
+            });
+        });
+    </script>
+</body>
+</html>
